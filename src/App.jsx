@@ -4,6 +4,8 @@ import AlertFeed from './components/AlertFeed';
 import MapView from './components/MapView';
 import RailwayGPT from './components/RailwayGPT';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 const calculateStats = (trains) => {
   return trains.reduce((acc, t) => {
     acc[t.status === 'on-time' ? 'onTime' : t.status === 'delayed' ? 'delayed' : 'stopped']++;
@@ -30,7 +32,7 @@ function App() {
 
   const fetchState = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/state');
+      const response = await fetch(`${API_BASE_URL}/api/state`);
       if (!response.ok) throw new Error('Network response was not ok');
       const data = await response.json();
       
@@ -65,7 +67,7 @@ function App() {
   useEffect(() => {
     const fetchState = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/state');
+        const response = await fetch(`${API_BASE_URL}/api/state`);
         if (!response.ok) throw new Error('Network response was not ok');
         const data = await response.json();
         

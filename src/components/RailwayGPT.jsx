@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Settings, Lock, BrainCircuit, Loader2 } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 const SYSTEM_PROMPT_TEMPLATE = `You are RailwayGPT, the AI operations assistant for RailTwin — India's next-generation railway operations platform.
 
 You have access to live data for 30 trains currently operating across India's railway network.
@@ -95,7 +97,7 @@ const RailwayGPT = ({ trains, alerts, stats, networkHealth, chatMessages, setCha
         ...apiMessages
       ];
 
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
