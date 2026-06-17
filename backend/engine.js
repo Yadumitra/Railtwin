@@ -1,5 +1,5 @@
 const { getKeralaStations, OFFLINE_STATIONS, OFFLINE_CORRIDOR } = require('./osm');
-const { getTrainsAtStation, getLiveTrainStatus } = require('./api');
+const { getTrainsAtStation, getLiveTrainStatus, getAllLiveTrains } = require('./api');
 
 let state = {
   stations: [],
@@ -234,7 +234,7 @@ async function pollLiveTrains() {
   const activeTrainNumbers = new Set();
   
   // Pick 10 random stations to discover trains across Kerala without hitting rate limits
-  const randomStations = [...state.stations].sort(() => 0.5 - Math.random()).slice(0, 10);
+  const randomStations = [...state.stations].sort(() => 0.5 - Math.random()).slice(0, 20);
   
   let successCount = 0;
 
@@ -251,17 +251,10 @@ async function pollLiveTrains() {
     return;
   }
 
-  console.log(`Discovered ${activeTrainNumbers.size} live trains.`);
-  const liveTrains = [];
-  for (const trainNo of activeTrainNumbers) {
-    const status = await getLiveTrainStatus(trainNo);
-    if (status) {
-       // Ensure smooth initial mapping
-       if (!status.lat) status.lat = status.baseLat;
-       if (!status.lng) status.lng = status.baseLng;
-       liveTrains.push(status);
-    }
-  }
+  // The activeTrainNumbers set only holds the trains we literally *just* polled this minute.
+  // We need to fetch ALL trains from the cache to persist them on the map.
+  const liveTrains = getAllLiveTrains();
+  console.log(`Tracking ${liveTrains.length} total live trains.`);
 
   await attachLiveWeather(liveTrains);
 

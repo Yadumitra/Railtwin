@@ -82,10 +82,10 @@ async function getTrainsAtStation(stationCode, stationLat, stationLng) {
           
           const diffMinutes = (now - trainTime) / (1000 * 60);
           
-          // STRICT FILTER: We only map the train to this station if it is actively in its vicinity.
-          // If it departed more than 30 mins ago, or is scheduled to arrive more than 60 minutes from now, ignore.
-          if (diffMinutes > 30 || diffMinutes < -60) {
-            return; // Skip processing to prevent teleportation
+          // We want to track trains that are actively moving between stations.
+          // If it departed more than 60 mins ago, or is scheduled to arrive more than 180 minutes (3 hours) from now, ignore.
+          if (diffMinutes > 60 || diffMinutes < -180) {
+            return; // Skip processing to prevent extreme distant teleportation
           }
         }
 
@@ -145,15 +145,20 @@ async function getLiveTrainStatus(trainNo) {
   return null;
 }
 
-// Every 5 minutes, purge trains from the cache that haven't been seen anywhere in the last 30 minutes.
-// This prevents trains that left the state or terminated from being stuck on the board.
+function getAllLiveTrains() {
+  return Array.from(trainCache.values());
+}
+
+// Every 5 minutes, purge trains from the cache that haven't been seen anywhere in the last 4 hours.
+// This prevents trains that left the state or terminated from being stuck on the board, 
+// while allowing trains on long 3-hour stretches between junctions to remain alive.
 setInterval(() => {
   const now = Date.now();
   for (const [trainNo, data] of trainCache.entries()) {
-    if (now - data.lastSeen > 30 * 60 * 1000) {
+    if (now - data.lastSeen > 4 * 60 * 60 * 1000) {
       trainCache.delete(trainNo);
     }
   }
 }, 5 * 60 * 1000);
 
-module.exports = { getTrainsAtStation, getLiveTrainStatus };
+module.exports = { getTrainsAtStation, getLiveTrainStatus, getAllLiveTrains };
