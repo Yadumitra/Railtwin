@@ -178,22 +178,27 @@ function App() {
             <div className="text-accent-red mb-4">
               <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
             </div>
-          )}
-          
-          {isSimulated && backendStatus !== 'error' && (
-            <div className="bg-accent-blue/10 border-b border-border text-accent-cyan text-xs py-2 px-4 flex items-center justify-between z-[400] font-mono shrink-0">
-              <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-accent-cyan animate-pulse"></span>
-                ACTIVE DIGITAL TWIN SIMULATOR (Live Indian Rail API Fallback Enabled)
-              </span>
-            </div>
-          )}
-          
-          <MapView 
-            trains={trains} 
-            stations={stations}
-            activeScenario={null} 
-          />
+            <h2 className="text-2xl font-bold mb-2">No Live Data Available</h2>
+            <p className="text-muted text-center max-w-md">
+              Unable to connect to live tracking APIs or the backend server is unreachable. We don't simulate data. Please check your API keys or ensure the FastAPI/Node server is running on port 8000.
+            </p>
+          </div>
+        ) : (
+          <div className="flex-1 relative flex flex-col">
+            {isSimulated && backendStatus !== 'error' && (
+              <div className="bg-accent-blue/10 border-b border-border text-accent-cyan text-xs py-2 px-4 flex items-center justify-between z-[400] font-mono shrink-0">
+                <span className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-accent-cyan animate-pulse"></span>
+                  ACTIVE DIGITAL TWIN SIMULATOR (Live Indian Rail API Fallback Enabled)
+                </span>
+              </div>
+            )}
+            <MapView 
+              trains={trains} 
+              stations={stations}
+              activeScenario={null} 
+            />
+          </div>
         )}
 
         <div className={`fixed md:static top-0 right-0 bottom-0 z-50 md:z-auto h-full w-[85vw] sm:w-[360px] md:w-[360px] transition-transform duration-300 ease-in-out transform md:transform-none bg-surface flex border-l border-border shrink-0 md:order-3 ${
