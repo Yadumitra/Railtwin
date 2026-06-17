@@ -4,6 +4,27 @@ const cheerio = require('cheerio');
 // In-memory cache to store train details scraped during station polling
 const trainCache = new Map();
 
+function estimatePassengers(trainName, hash) {
+  const name = trainName.toUpperCase();
+  let baseCapacity = 1200; // Default Express capacity
+  
+  if (name.includes('MEMU') || name.includes('PASSENGER') || name.includes('LOCAL')) {
+    baseCapacity = 1800; // High density unreserved trains
+  } else if (name.includes('VANDE BHARAT') || name.includes('SHATABDI') || name.includes('TEJAS')) {
+    baseCapacity = 1128; // Standard 16-coach chair car
+  } else if (name.includes('RAJDHANI') || name.includes('DURONTO')) {
+    baseCapacity = 1050; // Premium sleeper
+  } else if (name.includes('GARIB RATH')) {
+    baseCapacity = 1400; // High capacity 3A
+  } else if (name.includes('SF') || name.includes('EXP') || name.includes('MAIL')) {
+    baseCapacity = 1300; // Standard 22-coach Express
+  }
+
+  // Simulate a realistic occupancy rate between 85% and 100% using a deterministic hash
+  const occupancyRate = 0.85 + ((hash % 16) / 100); 
+  return Math.floor(baseCapacity * occupancyRate);
+}
+
 async function getTrainsAtStation(stationCode, stationLat, stationLng) {
   try {
     const res = await axios.get(`https://erail.in/station-live/${stationCode}?req=1`, {
@@ -30,27 +51,6 @@ async function getTrainsAtStation(stationCode, stationLat, stationLng) {
           return; // Skip processing this train
         }
 
-        // Parse Departure Time to ensure we don't track ghost trains that passed through hours ago
-        const tds = $(el).find('td');
-        let depTimeStr = $(tds[2]).text().replace(/[^\d:]/g, '').trim();
-        if (!depTimeStr) depTimeStr = $(tds[1]).text().replace(/[^\d:]/g, '').trim();
-        
-        if (depTimeStr && depTimeStr.includes(':')) {
-          const [hours, mins] = depTimeStr.split(':').map(Number);
-          const now = new Date();
-          const trainTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, mins);
-          
-          if (now.getHours() < 6 && hours > 18) trainTime.setDate(trainTime.getDate() - 1);
-          else if (now.getHours() > 18 && hours < 6) trainTime.setDate(trainTime.getDate() + 1);
-          
-          const diffMinutes = (now - trainTime) / (1000 * 60);
-          
-          // If the train departed this station more than 90 minutes ago, consider this a stale historical record.
-          if (diffMinutes > 90) {
-            return; // Skip processing
-          }
-        }
-
         // Find delay (usually in red text or spanning)
         let delay = 0;
         // Search specifically for the span that has the 'm' suffix without other text
@@ -63,6 +63,31 @@ async function getTrainsAtStation(stationCode, stationLat, stationLng) {
             }
           }
         });
+
+        // Parse Expected Time (Departure or Arrival) to ensure we don't track ghost trains
+        const tds = $(el).find('td');
+        let depTimeStr = $(tds[2]).text().replace(/[^\d:]/g, '').trim();
+        if (!depTimeStr) depTimeStr = $(tds[1]).text().replace(/[^\d:]/g, '').trim();
+        
+        if (depTimeStr && depTimeStr.includes(':')) {
+          const [hours, mins] = depTimeStr.split(':').map(Number);
+          const now = new Date();
+          const trainTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, mins);
+          
+          if (now.getHours() < 6 && hours > 18) trainTime.setDate(trainTime.getDate() - 1);
+          else if (now.getHours() > 18 && hours < 6) trainTime.setDate(trainTime.getDate() + 1);
+          
+          // Add the real-time delay to the scheduled time
+          trainTime.setMinutes(trainTime.getMinutes() + delay);
+          
+          const diffMinutes = (now - trainTime) / (1000 * 60);
+          
+          // STRICT FILTER: We only map the train to this station if it is actively in its vicinity.
+          // If it departed more than 30 mins ago, or is scheduled to arrive more than 60 minutes from now, ignore.
+          if (diffMinutes > 30 || diffMinutes < -60) {
+            return; // Skip processing to prevent teleportation
+          }
+        }
 
         trains.push(trainNo);
         
@@ -97,7 +122,7 @@ async function getTrainsAtStation(stationCode, stationLat, stationLng) {
             baseLng: stationLng,
             lat: stationLat + latOffset,
             lng: stationLng + lngOffset,
-            passengers: Math.floor(hash % 800) + 200,
+            passengers: estimatePassengers(trainName, hash),
             riskScore: delay > 60 ? 80 : 10,
             lastSeen: Date.now()
           });
@@ -120,15 +145,15 @@ async function getLiveTrainStatus(trainNo) {
   return null;
 }
 
-// Every 15 minutes, purge trains from the cache that haven't been seen anywhere in the last 2 hours.
-// This prevents trains that left the state from being stuck on the border forever.
+// Every 5 minutes, purge trains from the cache that haven't been seen anywhere in the last 30 minutes.
+// This prevents trains that left the state or terminated from being stuck on the board.
 setInterval(() => {
   const now = Date.now();
   for (const [trainNo, data] of trainCache.entries()) {
-    if (now - data.lastSeen > 2 * 60 * 60 * 1000) {
+    if (now - data.lastSeen > 30 * 60 * 1000) {
       trainCache.delete(trainNo);
     }
   }
-}, 15 * 60 * 1000);
+}, 5 * 60 * 1000);
 
 module.exports = { getTrainsAtStation, getLiveTrainStatus };

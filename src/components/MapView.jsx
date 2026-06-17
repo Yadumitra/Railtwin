@@ -27,7 +27,7 @@ const createIcon = (status, name, id) => {
   });
 };
 
-const MapView = ({ trains = [], activeScenario = null, stations = [] }) => {
+const MapView = ({ trains = [], stations = [] }) => {
   const [map, setMap] = useState(null);
 
   // Center on Kerala
@@ -88,46 +88,6 @@ const MapView = ({ trains = [], activeScenario = null, stations = [] }) => {
           </Circle>
         ))}
 
-        {/* Disaster Hazard Zone Overlay */}
-        {activeScenario && getDisasterCenter(activeScenario.id) && (
-          <React.Fragment>
-            {/* Pulsing red danger circle */}
-            <Circle
-              center={getDisasterCenter(activeScenario.id)}
-              radius={30000} // 30km radius
-              pathOptions={{
-                color: '#EF4444',
-                fillColor: '#EF4444',
-                fillOpacity: 0.1,
-                weight: 2,
-                dashArray: '6, 6',
-              }}
-            />
-            {/* Center glowing alert ring */}
-            <Circle
-              center={getDisasterCenter(activeScenario.id)}
-              radius={10000} // 10km inner core
-              pathOptions={{
-                color: '#EF4444',
-                fillColor: '#EF4444',
-                fillOpacity: 0.25,
-                weight: 1.5,
-              }}
-            >
-              <Popup className="custom-popup">
-                <div className="p-2 bg-[#111827] text-[#F1F5F9] rounded-lg">
-                  <div className="font-bold text-[#EF4444] text-sm mb-1 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#EF4444] animate-pulse"></span>
-                    SIMULATED HAZARD ZONE
-                  </div>
-                  <div className="text-xs text-[#9CA3AF] leading-relaxed">
-                    <strong>{activeScenario.name}</strong> epicenter. All trains within 30km are automatically restricted.
-                  </div>
-                </div>
-              </Popup>
-            </Circle>
-          </React.Fragment>
-        )}
 
         {/* Trains */}
         {trains.map(train => (
@@ -166,6 +126,14 @@ const MapView = ({ trains = [], activeScenario = null, stations = [] }) => {
                     <span className="text-[#64748B]">Capacity:</span>
                     <span className="font-mono text-[#06B6D4]">{train.passengers} pax</span>
                   </div>
+                  {(train.precipitation !== undefined) && (
+                    <div className="flex justify-between border-t border-[#1E293B] pt-1.5 mt-1.5">
+                      <span className="text-[#64748B] text-[10px]">Live Weather:</span>
+                      <span className={`font-mono text-[10px] ${train.weatherRisk ? 'text-[#EF4444] font-bold' : 'text-[#3B82F6]'}`}>
+                        {train.precipitation}mm/h | {train.windSpeed}km/h
+                      </span>
+                    </div>
+                  )}
                   <div className="pt-1.5 border-t border-[#1E293B] flex justify-between text-[10px] text-[#64748B]">
                     <span>ETA Next Stop:</span>
                     <span className="font-mono text-[#F1F5F9]">{train.status === 'stopped' ? 'HOLD' : `~${Math.max(8, 30 - train.delay)}m`}</span>

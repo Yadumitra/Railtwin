@@ -1,4 +1,4 @@
-const { getKeralaStations } = require('./osm');
+const { getKeralaStations, OFFLINE_STATIONS, OFFLINE_CORRIDOR } = require('./osm');
 const { getTrainsAtStation, getLiveTrainStatus } = require('./api');
 
 let state = {
@@ -6,9 +6,76 @@ let state = {
   trains: [],
   lastUpdated: null,
   status: 'initializing', // 'initializing', 'live', 'error'
-  isSimulated: false,
-  activeScenario: null
+  isSimulated: false
 };
+
+const axios = require('axios');
+let lastWeatherUpdate = 0;
+let weatherCache = new Map(); // coordinate string -> weather data
+
+async function attachLiveWeather(trains) {
+  const now = Date.now();
+  // Poll Open-Meteo every 15 minutes (900000 ms)
+  if (now - lastWeatherUpdate > 900000) {
+    console.log("Polling live meteorological data for active zones...");
+    
+    const coordsMap = new Map();
+    for (const t of trains) {
+      if (t.baseLat && t.baseLng) {
+        coordsMap.set(`${t.baseLat},${t.baseLng}`, { lat: t.baseLat, lng: t.baseLng });
+      }
+    }
+    
+    const uniqueCoords = Array.from(coordsMap.values());
+    if (uniqueCoords.length > 0) {
+      const chunks = [];
+      for (let i = 0; i < uniqueCoords.length; i += 50) {
+        chunks.push(uniqueCoords.slice(i, i + 50));
+      }
+      
+      weatherCache.clear();
+      
+      for (const chunk of chunks) {
+        const lats = chunk.map(c => c.lat).join(',');
+        const lngs = chunk.map(c => c.lng).join(',');
+        try {
+           const res = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lngs}&current=precipitation,weather_code,wind_speed_10m`);
+           const dataArray = Array.isArray(res.data) ? res.data : [res.data];
+           
+           dataArray.forEach((d, index) => {
+             const c = chunk[index];
+             weatherCache.set(`${c.lat},${c.lng}`, {
+               precipitation: d.current.precipitation,
+               windSpeed: d.current.wind_speed_10m
+             });
+           });
+        } catch (err) {
+           console.error("Open-Meteo fetch error:", err.message);
+        }
+      }
+      lastWeatherUpdate = now;
+      console.log(`Weather updated for ${uniqueCoords.length} unique coordinates.`);
+    }
+  }
+  
+  // Attach cached weather
+  for (const t of trains) {
+     if (t.baseLat && t.baseLng) {
+        const w = weatherCache.get(`${t.baseLat},${t.baseLng}`);
+        if (w) {
+           t.precipitation = w.precipitation;
+           t.windSpeed = w.windSpeed;
+           t.weatherRisk = false;
+           // If rain > 10mm/h (heavy) or wind > 60km/h
+           if (w.precipitation >= 10 || w.windSpeed >= 60) {
+              t.weatherRisk = true;
+              t.riskScore = Math.max(t.riskScore || 0, 85);
+              if (t.status === 'on-time') t.status = 'delayed';
+           }
+        }
+     }
+  }
+}
 
 const MOCK_TRAIN_NAMES = [
   { id: "12626", name: "Kerala Express" },
@@ -102,13 +169,7 @@ function initSimulation() {
   console.log("Initialized fail-safe route-following simulation with 12 trains.");
 }
 
-function getDisasterCenter(scenarioId) {
-  if (scenarioId === 'WZ-Kerala') return [9.9816, 76.2999]; // Ernakulam
-  if (scenarioId === 'WZ-Konkan') return [11.9, 75.3]; // North Kerala
-  if (scenarioId === 'WZ-Northeast') return [11.5, 76.0]; // Wayanad/Storm
-  if (scenarioId === 'WZ-Rajasthan') return [10.5, 76.2]; // Palakkad Gap
-  return null;
-}
+// Disaster simulation removed in favor of live weather
 
 function tickSimulation() {
   simulatedTrains.forEach(train => {
@@ -116,36 +177,16 @@ function tickSimulation() {
     if (!coords || coords.length === 0) return;
 
     let speedMultiplier = 1;
-    if (state.activeScenario) {
-      const center = getDisasterCenter(state.activeScenario.id);
-      if (center) {
-        const dist = Math.sqrt(Math.pow(train.lat - center[0], 2) + Math.pow(train.lng - center[1], 2));
-        if (dist < 0.35) { // Impact radius of ~35km
-          if (state.activeScenario.id === 'WZ-Kerala' || state.activeScenario.id === 'WZ-Konkan') {
-            train.status = 'stopped';
-            speedMultiplier = 0;
-            train.delay = Math.min(train.delay + 2, 120);
-          } else {
-            train.status = 'delayed';
-            speedMultiplier = 0.25;
-            train.delay = Math.min(train.delay + 1, 75);
-          }
-        } else {
-          train.status = train.delay > 15 ? 'delayed' : 'on-time';
-        }
-      }
-    } else {
-      if (train.status === 'stopped') {
-        train.status = 'on-time';
-        train.delay = 0;
-      }
-      if (Math.random() < 0.01) {
-        train.status = 'delayed';
-        train.delay = Math.floor(Math.random() * 20) + 10;
-      } else if (Math.random() < 0.005) {
-        train.status = 'on-time';
-        train.delay = 0;
-      }
+    if (train.status === 'stopped') {
+      train.status = 'on-time';
+      train.delay = 0;
+    }
+    if (Math.random() < 0.01) {
+      train.status = 'delayed';
+      train.delay = Math.floor(Math.random() * 20) + 10;
+    } else if (Math.random() < 0.005) {
+      train.status = 'on-time';
+      train.delay = 0;
     }
 
     train.progress += train.routeDirection * train.speed * speedMultiplier;
@@ -214,8 +255,15 @@ async function pollLiveTrains() {
   const liveTrains = [];
   for (const trainNo of activeTrainNumbers) {
     const status = await getLiveTrainStatus(trainNo);
-    if (status) liveTrains.push(status);
+    if (status) {
+       // Ensure smooth initial mapping
+       if (!status.lat) status.lat = status.baseLat;
+       if (!status.lng) status.lng = status.baseLng;
+       liveTrains.push(status);
+    }
   }
+
+  await attachLiveWeather(liveTrains);
 
   state.trains = liveTrains;
   state.isSimulated = false;
@@ -223,21 +271,58 @@ async function pollLiveTrains() {
   state.status = 'live';
 }
 
+// Tick loop to animate trains smoothly towards their detected target stations
+function tickLiveTrains() {
+  if (state.isSimulated) return;
+
+  let moved = false;
+  state.trains.forEach(t => {
+     if (t.baseLat && t.baseLng) {
+        // Calculate distance to target base station
+        const latDiff = t.baseLat - t.lat;
+        const lngDiff = t.baseLng - t.lng;
+        
+        // If distance is significant, animate towards it
+        // A train moves roughly 0.0005 degrees per second (approx 50m/s)
+        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+        
+        if (distance > 0.001) {
+           moved = true;
+           const speed = t.status === 'delayed' ? 0.0002 : 0.0005; 
+           const ratio = speed / distance;
+           
+           // Ensure we don't overshoot
+           if (ratio >= 1) {
+              t.lat = t.baseLat;
+              t.lng = t.baseLng;
+           } else {
+              t.lat += latDiff * ratio;
+              t.lng += lngDiff * ratio;
+           }
+        } else {
+           // Snap if very close
+           t.lat = t.baseLat;
+           t.lng = t.baseLng;
+        }
+     }
+  });
+
+  if (moved) {
+     state.lastUpdated = new Date().toISOString();
+  }
+}
+
 function getState() {
   if (state.isSimulated) {
+    tickSimulation(); // Progress simulation strictly when state is requested
     return {
       ...state,
       stations: OFFLINE_STATIONS,
       corridor: OFFLINE_CORRIDOR
     };
   }
+  tickLiveTrains(); // Animate real trains
   return state;
 }
 
-function setDisaster(scenario) {
-  state.activeScenario = scenario;
-  console.log("Active scenario updated:", scenario ? scenario.name : "none");
-}
-
-module.exports = { initEngine, getState, setDisaster };
-
+module.exports = { initEngine, getState };

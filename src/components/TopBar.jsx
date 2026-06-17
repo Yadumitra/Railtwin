@@ -77,14 +77,14 @@ const TopBar = ({ networkHealth, totalTrains, backendStatus, onOpenDisasterModal
         </div>
         
         <div className="flex items-center gap-2">
-          <button 
-            onClick={onOpenDisasterModal}
-            className="bg-accent-amber/15 hover:bg-accent-amber/25 border border-accent-amber/40 hover:border-accent-amber text-accent-amber text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+          <div 
+            className="bg-accent-blue/15 border border-accent-blue/40 text-accent-cyan text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-default"
+            title="Open-Meteo Live Satellite Radar Active"
           >
-            <Zap className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Disaster Sim</span>
-            <span className="sm:hidden">Sim</span>
-          </button>
+            <Zap className="w-3.5 h-3.5 animate-pulse" />
+            <span className="hidden sm:inline">Live Weather Radar</span>
+            <span className="sm:hidden">Radar</span>
+          </div>
           
           <button 
             onClick={onToggleChat}

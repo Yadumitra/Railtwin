@@ -21,11 +21,13 @@ NETWORK STATUS:
 
 You answer questions from railway operations managers. Be specific, professional, and reference actual train IDs and names from the data. Keep responses concise (3-5 sentences max unless a detailed breakdown is requested). Format lists clearly. Always prioritize safety-critical information. You may suggest operational decisions but always note they require human authorization.
 
-If the user asks about a disaster simulation or flood/landslide scenario, describe the impact on trains in the affected zone based on their current positions.`;
+If the user asks about weather, refer to the actual 'weatherRisk', 'precipitation' (mm/h), and 'windSpeed' (km/h) properties attached to trains in the TRAIN_DATA. If a train has weatherRisk=true, it means it is currently driving through severe rain (>10mm/h) or dangerous winds (>60km/h).
+
+CRITICAL BOUNDARY RULE: You are STRICTLY RESTRICTED to answering queries about the railway network, trains, delays, stations, live weather risks, operations, and dashboard data. If the user asks ANY question unrelated to railways, trains, or the provided dashboard data (e.g., math problems, general trivia, coding questions), you MUST refuse to answer. Respond exactly with: "I am a dedicated railway operations assistant. I can only assist with queries related to the live train network and operational statuses."`;
 
 const QUICK_ACTIONS = [
   "Which trains are at risk right now?",
-  "Simulate flood in Kerala — what's the impact?",
+  "Are any trains facing severe weather?",
   "Show me the most delayed trains",
   "What's the current network health?"
 ];
@@ -69,11 +71,6 @@ const RailwayGPT = ({ trains, alerts, stats, networkHealth, chatMessages, setCha
   const handleSend = async (textOverride) => {
     const textToProcess = textOverride || input;
     if (!textToProcess.trim()) return;
-    
-    if (!apiKey) {
-      setShowSettings(true);
-      return;
-    }
 
     const newUserMsg = { role: 'user', content: textToProcess };
     const newHistory = [...chatMessages, newUserMsg];
@@ -93,35 +90,34 @@ const RailwayGPT = ({ trains, alerts, stats, networkHealth, chatMessages, setCha
         .replace('{HEALTH}', networkHealth);
 
       const apiMessages = newHistory.filter(m => m.role === 'user' || m.role === 'assistant');
+      const groqMessages = [
+        { role: 'system', content: systemPrompt },
+        ...apiMessages
+      ];
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: apiMessages.map(m => ({ role: m.role, content: m.content }))
+          messages: groqMessages
         })
       });
 
       if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(`Server Error: ${errData.error || response.statusText}`);
       }
 
       const data = await response.json();
-      setChatMessages([...newHistory, { role: 'assistant', content: data.content[0].text }]);
+      setChatMessages([...newHistory, { role: 'assistant', content: data.content }]);
       
     } catch (err) {
       console.error(err);
       setChatMessages([...newHistory, { 
         role: 'assistant', 
-        content: `Error connecting to Claude API. Please check your API key and try again. (${err.message})` 
+        content: `Connection error. ${err.message}` 
       }]);
     } finally {
       setIsLoading(false);
@@ -138,43 +134,10 @@ const RailwayGPT = ({ trains, alerts, stats, networkHealth, chatMessages, setCha
           </div>
           <div>
             <h2 className="font-display font-bold text-text leading-none">RailwayGPT</h2>
-            <span className="text-[10px] text-muted">Powered by Claude</span>
+            <span className="text-[10px] text-muted">Powered by Groq (Llama 3)</span>
           </div>
         </div>
-        
-        <button 
-          onClick={() => setShowSettings(!showSettings)}
-          className={`p-1.5 rounded transition-colors ${apiKey ? 'text-accent-green bg-accent-green/10' : 'text-muted hover:text-text hover:bg-elevated'}`}
-          title="API Settings"
-        >
-          {apiKey ? <Lock className="w-4 h-4" /> : <Settings className="w-4 h-4" />}
-        </button>
       </div>
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="absolute top-16 left-0 right-0 bg-elevated border-b border-border p-4 shadow-lg z-20 animate-[fadeIn_0.2s_ease-out]">
-          <label className="block text-xs text-muted mb-1">Anthropic API Key</label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-..."
-            className="w-full bg-surface border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:border-accent-blue"
-          />
-          <p className="text-[10px] text-muted mt-2 leading-tight">
-            Key is stored locally in React state and sent directly to Anthropic.
-          </p>
-          <div className="flex justify-end mt-3">
-            <button 
-              onClick={() => setShowSettings(false)}
-              className="bg-accent-blue hover:bg-accent-blue/90 text-white text-xs px-3 py-1.5 rounded"
-            >
-              Save & Close
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Chat Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>

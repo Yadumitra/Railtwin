@@ -3,7 +3,6 @@ import TopBar from './components/TopBar';
 import AlertFeed from './components/AlertFeed';
 import MapView from './components/MapView';
 import RailwayGPT from './components/RailwayGPT';
-import DisasterSimModal from './components/DisasterSimModal';
 
 const calculateStats = (trains) => {
   return trains.reduce((acc, t) => {
@@ -21,8 +20,6 @@ function App() {
   const [backendStatus, setBackendStatus] = useState('connecting');
   const [chatMessages, setChatMessages] = useState([]);
   const [isSimulated, setIsSimulated] = useState(false);
-  const [activeScenario, setActiveScenario] = useState(null);
-  const [isDisasterModalOpen, setIsDisasterModalOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   const stats = calculateStats(trains);
@@ -42,7 +39,6 @@ function App() {
       setCorridor(data.corridor || []);
       setBackendStatus(data.status); // 'live' or 'error'
       setIsSimulated(data.isSimulated || false);
-      setActiveScenario(data.activeScenario || null);
 
       // Simple mock operational updates for alert stream
       if (data.trains && data.trains.length > 0 && Math.random() < 0.25) {
@@ -100,61 +96,11 @@ function App() {
     };
 
     fetchState();
-    const interval = setInterval(fetchState, 3000); // Polling every 3s for real-time movements
+    const interval = setInterval(fetchState, 1000); // Polling every 1s for smooth interpolation
     return () => clearInterval(interval);
   }, []);
 
-  const handleActivateScenario = async (scenario) => {
-    try {
-      const res = await fetch('http://localhost:8000/api/disaster', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario })
-      });
-      const data = await res.json();
-      if (data.success) {
-        setActiveScenario(scenario);
-        setIsDisasterModalOpen(false);
-        // Append critical alert immediately
-        const newAlert = {
-          id: Date.now().toString(),
-          type: 'critical',
-          message: `DISASTER SIMULATION STARTED: ${scenario.name} active. Impact radius affecting regional operations.`,
-          time: 'Just now',
-          trainId: null
-        };
-        setAlerts(prev => [newAlert, ...prev]);
-        fetchState();
-      }
-    } catch (e) {
-      console.error("Failed to activate scenario:", e);
-    }
-  };
 
-  const handleCancelScenario = async () => {
-    try {
-      const res = await fetch('http://localhost:8000/api/disaster/clear', {
-        method: 'POST'
-      });
-      const data = await res.json();
-      if (data.success) {
-        setActiveScenario(null);
-        setIsDisasterModalOpen(false);
-        // Append resolution alert
-        const newAlert = {
-          id: Date.now().toString(),
-          type: 'resolved',
-          message: `SIMULATION CLEARED: All hazard zones deactivated. Re-establishing standard schedules.`,
-          time: 'Just now',
-          trainId: null
-        };
-        setAlerts(prev => [newAlert, ...prev]);
-        fetchState();
-      }
-    } catch (e) {
-      console.error("Failed to clear scenario:", e);
-    }
-  };
 
   return (
     <div className="flex flex-col h-screen w-full bg-primary text-text overflow-hidden relative">
@@ -162,7 +108,6 @@ function App() {
         networkHealth={networkHealth}
         totalTrains={stats.total}
         backendStatus={backendStatus}
-        onOpenDisasterModal={() => setIsDisasterModalOpen(true)}
         isChatOpen={isChatOpen}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
       />
@@ -214,14 +159,6 @@ function App() {
           />
         </div>
       </div>
-
-      <DisasterSimModal 
-        isOpen={isDisasterModalOpen}
-        onClose={() => setIsDisasterModalOpen(false)}
-        onActivate={handleActivateScenario}
-        activeScenario={activeScenario}
-        onCancel={handleCancelScenario}
-      />
     </div>
   );
 }

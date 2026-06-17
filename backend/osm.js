@@ -67,4 +67,4 @@ async function getKeralaStations() {
   return OFFLINE_STATIONS;
 }
 
-module.exports = { getKeralaStations };
+module.exports = { getKeralaStations, OFFLINE_STATIONS, OFFLINE_CORRIDOR };
