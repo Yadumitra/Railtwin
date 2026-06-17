@@ -3,154 +3,94 @@ import TopBar from './components/TopBar';
 import AlertFeed from './components/AlertFeed';
 import MapView from './components/MapView';
 import RailwayGPT from './components/RailwayGPT';
-import DisasterSimModal from './components/DisasterSimModal';
-import { INITIAL_TRAINS } from './data/trains';
 
 const calculateStats = (trains) => {
   return trains.reduce((acc, t) => {
-    acc[t.status === 'on-time' ? 'onTime' : t.status === 'delayed' ? 'delayed' : t.status === 'at-risk' ? 'atRisk' : 'stopped']++;
+    acc[t.status === 'on-time' ? 'onTime' : t.status === 'delayed' ? 'delayed' : 'stopped']++;
     acc.total++;
     return acc;
-  }, { onTime: 0, delayed: 0, atRisk: 0, stopped: 0, total: 0 });
-};
-
-const getDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+  }, { onTime: 0, delayed: 0, stopped: 0, total: 0 });
 };
 
 function App() {
-  const [trains, setTrains] = useState(INITIAL_TRAINS);
+  const [trains, setTrains] = useState([]);
+  const [stations, setStations] = useState([]);
+  const [corridor, setCorridor] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [isSimModalOpen, setIsSimModalOpen] = useState(false);
-  const [activeScenario, setActiveScenario] = useState(null);
+  const [backendStatus, setBackendStatus] = useState('connecting');
   const [chatMessages, setChatMessages] = useState([]);
 
   const stats = calculateStats(trains);
-  const networkHealth = Math.round((stats.onTime / stats.total) * 100);
+  const networkHealth = stats.total > 0 ? Math.round((stats.onTime / stats.total) * 100) : 0;
 
   useEffect(() => {
-    const moveTimer = setInterval(() => {
-      setTrains(prevTrains => prevTrains.map(t => {
-        if (t.status === 'stopped') return t;
-        const latChange = (Math.random() - 0.5) * 0.05;
-        const lngChange = (Math.random() - 0.5) * 0.05;
-        return {
-          ...t,
-          lat: t.lat + latChange,
-          lng: t.lng + lngChange
-        };
-      }));
-    }, 3000);
-    return () => clearInterval(moveTimer);
-  }, []);
+    const fetchState = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/state');
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        
+        setTrains(data.trains || []);
+        setStations(data.stations || []);
+        setCorridor(data.corridor || []);
+        setBackendStatus(data.status); // 'live' or 'error'
 
-  useEffect(() => {
-    const alertTimer = setInterval(() => {
-      if (trains.length === 0) return;
-      const targetTrain = trains[Math.floor(Math.random() * trains.length)];
-      
-      let type = 'info';
-      let message = '';
-      
-      if (targetTrain.status === 'stopped') {
-        type = 'critical';
-        message = `CRITICAL: Train ${targetTrain.name} stopped at non-scheduled location. Duration: ${targetTrain.delay} min.`;
-      } else if (targetTrain.status === 'at-risk') {
-        type = 'warning';
-        message = `WARNING: Train ${targetTrain.name} approaching hazard zone.`;
-      } else if (targetTrain.status === 'delayed') {
-        type = 'warning';
-        message = `WARNING: Train ${targetTrain.name} running ${targetTrain.delay} min delayed.`;
-      } else {
-        const infoMsg = [
-          `Track maintenance detected near ${targetTrain.from}. Speed restriction applied.`,
-          `Passenger density high at ${targetTrain.to}. Platform overcrowded.`,
-          `Train ${targetTrain.name} operating at optimal speed.`
-        ][Math.floor(Math.random() * 3)];
-        message = `INFO: ${infoMsg}`;
+        if (data.trains && data.trains.length > 0) {
+          // Just a mock alert generation for the feed since real API doesn't have an alert stream easily
+          const targetTrain = data.trains[Math.floor(Math.random() * data.trains.length)];
+          const newAlert = {
+            id: Date.now().toString(),
+            type: targetTrain.status === 'delayed' ? 'warning' : 'info',
+            message: targetTrain.status === 'delayed' 
+              ? `WARNING: Train ${targetTrain.name} running ${targetTrain.delay} min delayed.`
+              : `INFO: Train ${targetTrain.name} operating normally at ${targetTrain.lastStation}.`,
+            time: 'Just now',
+            trainId: targetTrain.id
+          };
+          setAlerts(prev => [newAlert, ...prev].slice(0, 12));
+        }
+
+      } catch (error) {
+        console.error('Error fetching backend state:', error);
+        setBackendStatus('error');
+        setTrains([]);
       }
-
-      const newAlert = {
-        id: Date.now().toString(),
-        type,
-        message,
-        time: 'Just now',
-        trainId: targetTrain.id
-      };
-
-      setAlerts(prev => [newAlert, ...prev].slice(0, 12));
-    }, Math.floor(Math.random() * 7000) + 8000);
-    
-    return () => clearInterval(alertTimer);
-  }, [trains]);
-
-  const handleActivateScenario = (scenario) => {
-    setActiveScenario(scenario);
-    setIsSimModalOpen(false);
-
-    let affectedCount = 0;
-    setTrains(prevTrains => prevTrains.map(t => {
-      const dist = getDistance(t.lat, t.lng, scenario.lat, scenario.lng);
-      if (dist <= scenario.radius) {
-        affectedCount++;
-        return { ...t, status: 'stopped', speed: 0, delay: 120, riskScore: 100 };
-      }
-      return t;
-    }));
-
-    const newAlert = {
-      id: Date.now().toString(),
-      type: 'critical',
-      message: `DISASTER ALERT: ${scenario.name} reported. ${affectedCount} trains halted in affected zone.`,
-      time: 'Just now'
     };
-    setAlerts(prev => [newAlert, ...prev].slice(0, 12));
 
-    setChatMessages(prev => [
-      ...prev,
-      { role: 'assistant', content: `🚨 DISASTER ALERT: ${scenario.name} activated. Assessing impact on network... ${affectedCount} trains have been halted in the affected zone. Awaiting further operational instructions.` }
-    ]);
-  };
-
-  const handleCancelScenario = () => {
-    setActiveScenario(null);
-    setAlerts(prev => [{
-      id: Date.now().toString(),
-      type: 'resolved',
-      message: `DISASTER SIMULATION CANCELLED: Operations resuming normal state.`,
-      time: 'Just now'
-    }, ...prev].slice(0, 12));
-    
-    setTrains(prevTrains => prevTrains.map(t => {
-      if (t.status === 'stopped' && Math.random() > 0.5) {
-         return { ...t, status: 'delayed', speed: 40, delay: 45, riskScore: 50 };
-      }
-      return t;
-    }));
-  };
+    fetchState();
+    const interval = setInterval(fetchState, 15000); // Check backend every 15s
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex flex-col h-screen w-full bg-primary text-text overflow-hidden">
       <TopBar 
-        onSimulateClick={() => setIsSimModalOpen(true)} 
         networkHealth={networkHealth}
         totalTrains={stats.total}
+        backendStatus={backendStatus}
       />
       
       <div className="flex flex-1 overflow-hidden relative">
         <AlertFeed alerts={alerts} stats={stats} />
         
-        <MapView 
-          trains={trains} 
-          activeScenario={activeScenario} 
-        />
+        {backendStatus === 'error' && trains.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center bg-surface relative z-10 border-l border-r border-border">
+            <div className="text-accent-red mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">No Live Data Available</h2>
+            <p className="text-muted text-center max-w-md">
+              Unable to connect to live tracking APIs or the backend server is unreachable. We don't simulate data. Please check your API keys or ensure the FastAPI/Node server is running on port 8000.
+            </p>
+          </div>
+        ) : (
+          <MapView 
+            trains={trains} 
+            stations={stations}
+            corridor={corridor}
+            activeScenario={null} 
+          />
+        )}
         
         <RailwayGPT 
           trains={trains}
@@ -161,14 +101,6 @@ function App() {
           setChatMessages={setChatMessages}
         />
       </div>
-
-      <DisasterSimModal
-        isOpen={isSimModalOpen}
-        onClose={() => setIsSimModalOpen(false)}
-        onActivate={handleActivateScenario}
-        activeScenario={activeScenario}
-        onCancel={handleCancelScenario}
-      />
     </div>
   );
 }

@@ -2,9 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { STATIONS } from '../data/stations';
 
-// Need custom icons since default leaflet icons don't work easily with webpack/vite without extra setup
 const createIcon = (status) => {
   return L.divIcon({
     className: 'custom-icon',
@@ -15,12 +13,12 @@ const createIcon = (status) => {
   });
 };
 
-const MapView = ({ trains, activeScenario, stations = STATIONS }) => {
+const MapView = ({ trains = [], activeScenario = null, stations = [], corridor = [] }) => {
   const [map, setMap] = useState(null);
 
-  // Center of India roughly
-  const center = [20.5937, 78.9629];
-  const zoom = 5;
+  // Center on Kerala
+  const center = [10.8505, 76.2711];
+  const zoom = 7;
 
   return (
     <div className="flex-1 h-[calc(100vh-64px)] relative z-0">
@@ -37,35 +35,33 @@ const MapView = ({ trains, activeScenario, stations = STATIONS }) => {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
-        {/* Draw routes between major stations - simple star pattern or sequential */}
-        {stations.map((s, i) => {
-          if (i === 0) return null;
-          return (
-            <Polyline 
-              key={`route-${i}`}
-              positions={[
-                [stations[i-1].lat, stations[i-1].lng],
-                [s.lat, s.lng]
-              ]}
-              color="#1E293B"
-              weight={2}
-              opacity={0.5}
-            />
-          );
-        })}
-
-        {/* Active Disaster Zone */}
-        {activeScenario && (
-          <Circle
-            center={[activeScenario.lat, activeScenario.lng]}
-            radius={activeScenario.radius * 1000} // radius is in km, leafet takes meters
-            pathOptions={{ 
-              color: activeScenario.type === 'flood' ? '#06B6D4' : '#EF4444', 
-              fillColor: activeScenario.type === 'flood' ? '#06B6D4' : '#EF4444', 
-              fillOpacity: 0.2 
-            }}
+        {/* Draw Rail Geometry from OSM */}
+        {corridor.map((segment, i) => (
+          <Polyline 
+            key={`corridor-${i}`}
+            positions={segment}
+            color="#3B82F6"
+            weight={2}
+            opacity={0.6}
           />
-        )}
+        ))}
+
+        {/* Draw Stations from OSM */}
+        {stations.map((s, i) => (
+          <Circle 
+            key={`station-${i}`}
+            center={[s.lat, s.lng]}
+            radius={2000} // 2km radius visualization
+            pathOptions={{ color: '#1E293B', fillColor: '#64748B', fillOpacity: 0.8 }}
+          >
+            <Popup className="custom-popup">
+              <div className="p-1">
+                <div className="font-bold text-text">{s.name}</div>
+                <div className="font-mono text-xs text-muted">{s.code}</div>
+              </div>
+            </Popup>
+          </Circle>
+        ))}
 
         {/* Trains */}
         {trains.map(train => (
@@ -88,17 +84,14 @@ const MapView = ({ trains, activeScenario, stations = STATIONS }) => {
                     {train.status}
                   </span>
                   
-                  <span className="text-muted">Speed</span>
-                  <span className="text-text font-mono">{train.speed} km/h</span>
-                  
                   <span className="text-muted">Delay</span>
                   <span className="text-text font-mono">{train.delay} min</span>
                   
-                  <span className="text-muted">Passengers</span>
+                  <span className="text-muted">Last Station</span>
+                  <span className="text-text font-mono">{train.lastStation}</span>
+
+                  <span className="text-muted">Est. Crowd</span>
                   <span className="text-text font-mono">{train.passengers}</span>
-                  
-                  <span className="text-muted">Risk</span>
-                  <span className="text-text font-mono">{train.riskScore}/100</span>
                 </div>
               </div>
             </Popup>
@@ -106,7 +99,6 @@ const MapView = ({ trains, activeScenario, stations = STATIONS }) => {
         ))}
       </MapContainer>
       
-      {/* Zoom controls overlaid manually to match dark theme */}
       <div className="absolute bottom-6 right-6 z-[400] flex flex-col gap-2">
         <button 
           onClick={() => map?.zoomIn()}
