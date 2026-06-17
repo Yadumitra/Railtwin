@@ -13,7 +13,7 @@ const createIcon = (status) => {
   });
 };
 
-const MapView = ({ trains = [], activeScenario = null, stations = [], corridor = [] }) => {
+const MapView = ({ trains = [], activeScenario = null, stations = [] }) => {
   const [map, setMap] = useState(null);
 
   // Center on Kerala
@@ -34,17 +34,6 @@ const MapView = ({ trains = [], activeScenario = null, stations = [], corridor =
           attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-
-        {/* Draw Rail Geometry from OSM */}
-        {corridor.map((segment, i) => (
-          <Polyline 
-            key={`corridor-${i}`}
-            positions={segment}
-            color="#3B82F6"
-            weight={2}
-            opacity={0.6}
-          />
-        ))}
 
         {/* Draw Stations from OSM */}
         {stations.map((s, i) => (

@@ -32,7 +32,6 @@ function App() {
         
         setTrains(data.trains || []);
         setStations(data.stations || []);
-        setCorridor(data.corridor || []);
         setBackendStatus(data.status); // 'live' or 'error'
 
         if (data.trains && data.trains.length > 0) {
@@ -71,7 +70,10 @@ function App() {
       />
       
       <div className="flex flex-1 overflow-hidden relative">
-        <AlertFeed alerts={alerts} stats={stats} />
+        {/* Force a fresh DOM tree for AlertFeed */}
+        <div className="h-full z-20 shadow-xl">
+          <AlertFeed alerts={alerts} stats={stats} trains={trains} />
+        </div>
         
         {backendStatus === 'error' && trains.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center bg-surface relative z-10 border-l border-r border-border">
@@ -87,7 +89,6 @@ function App() {
           <MapView 
             trains={trains} 
             stations={stations}
-            corridor={corridor}
             activeScenario={null} 
           />
         )}
