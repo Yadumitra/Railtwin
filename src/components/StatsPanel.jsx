@@ -14,29 +14,27 @@ const StatsPanel = ({ stats }) => {
       <h3 className="text-sm font-semibold text-text mb-4">Network Status Overview</h3>
       
       <div className="flex items-center">
-        <div className="w-24 h-24 shrink-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={30}
-                outerRadius={45}
-                paddingAngle={2}
-                dataKey="value"
-                stroke="none"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#1A2235', borderColor: '#1E293B', color: '#F1F5F9' }}
-                itemStyle={{ color: '#F1F5F9' }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="w-24 h-24 shrink-0 flex items-center justify-center">
+          <PieChart width={96} height={96}>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={30}
+              outerRadius={45}
+              paddingAngle={2}
+              dataKey="value"
+              stroke="none"
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip 
+              contentStyle={{ backgroundColor: '#1A2235', borderColor: '#1E293B', color: '#F1F5F9' }}
+              itemStyle={{ color: '#F1F5F9' }}
+            />
+          </PieChart>
         </div>
         
         <div className="flex-grow ml-4 grid grid-cols-2 gap-y-3 gap-x-2 text-sm">
