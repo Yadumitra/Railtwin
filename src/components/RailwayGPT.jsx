@@ -129,7 +129,7 @@ const RailwayGPT = ({ trains, alerts, stats, networkHealth, chatMessages, setCha
   };
 
   return (
-    <div className="w-[360px] shrink-0 bg-surface border-l border-border flex flex-col h-[calc(100vh-64px)] z-10 relative">
+    <div className="w-full h-full bg-surface flex flex-col relative">
       {/* Header */}
       <div className="p-4 border-b border-border bg-elevated/50 shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-2">

@@ -24,7 +24,7 @@ const getBorderColor = (type) => {
 
 const AlertFeed = ({ alerts, stats }) => {
   return (
-    <div className="w-[280px] shrink-0 bg-surface border-r border-border flex flex-col h-[calc(100vh-64px)] z-10 relative">
+    <div className="w-full h-full bg-surface flex flex-col relative">
       <div className="p-4 border-b border-border bg-elevated/50 shrink-0">
         <h2 className="font-display font-semibold flex items-center gap-2">
           <Activity className="w-4 h-4 text-accent-blue" />

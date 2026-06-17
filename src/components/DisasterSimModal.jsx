@@ -51,7 +51,7 @@ const DisasterSimModal = ({ isOpen, onClose, onActivate, activeScenario, onCance
           </button>
         </div>
 
-        <div className="p-6 grid grid-cols-2 gap-4">
+        <div className="p-5 md:p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto max-h-[60vh]">
           {SCENARIOS.map(s => {
             const isActive = activeScenario?.id === s.id;
             return (
